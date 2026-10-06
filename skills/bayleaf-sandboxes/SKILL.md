@@ -39,8 +39,12 @@ Use localhost tools for internal checks: `webfetch` cannot read private previews
 
 - Files and agent histories persist. Processes do not survive sleep. Deleting
   the sandbox destroys its files and histories.
-- Browser work periods last up to six hours and require deliberate renewal.
-  Idle sleep can occur sooner. Passive status checks do not renew work.
+- Private browser links last up to 24 hours. There is no work-session extension
+  or end-session action. If a link expires or the sandbox sleeps, return to
+  https://api.bayleaf.dev/ to resume. Link expiry does not stop applications.
+  New sandboxes stop after 1 hour idle and archive after 24 hours stopped;
+  sandbox data is reaped after 90 days without recorded activity. Passive
+  status checks do not keep compute awake.
 - Budgets are shared with the owner's other clients. Dollars and request counts
   are different units. Null is unknown, not unlimited or zero. Use response
   timestamps/reset fields; lifetime usage is not today's usage.
