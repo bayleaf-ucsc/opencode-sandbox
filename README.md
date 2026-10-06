@@ -6,7 +6,10 @@ Tested with OpenCode 2.0.23.
 - Registers BayLeaf as a provider for native `websearch`.
 - Replaces `webfetch` with BayLeaf public-page extraction, preserving URL-level
   allow/ask/deny permissions through the authenticated local OpenCode API.
-- Registers the skills and Python helpers in `skills/` directly from this package.
+- Adds `bayleaf_usage`, `bayleaf_sandbox_status`, `bayleaf_expose`, and
+  `bayleaf_unexpose`. Read-only inspection has no lifecycle effects; preview
+  mutations request permission with port and access scope as the resource.
+- Registers one environment-guidance skill directly from `skills/`.
 
 The managed environment supplies `BAYLEAF_API_KEY`, `BAYLEAF_OPENCODE_URL`
 and `OPENCODE_PASSWORD`. Search and extraction use BayLeaf's plaintext web

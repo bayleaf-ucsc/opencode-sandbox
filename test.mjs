@@ -57,14 +57,12 @@ async function run(fn) {
 
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
-  assert.deepEqual([...f.tools.keys()], ['webfetch']);
-  assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-sandbox-technique', 'expose-sandbox-ports-technique']);
+  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_sandbox_status','bayleaf_unexpose','bayleaf_usage','webfetch']);
+  assert.deepEqual([...f.skills.keys()], ['bayleaf-sandbox-technique']);
   for (const skill of f.skills.values()) {
     assert.ok(skill.content.startsWith('\n#') || skill.content.startsWith('#'));
     assert.ok(!skill.content.startsWith('---'));
     assert.ok((await readFile(skill.path, 'utf8')).includes(skill.description));
-    const helper = skill.id === 'bayleaf-sandbox-technique' ? 'status.py' : 'expose.py';
-    assert.ok((await readFile(new URL('./scripts/'+helper, 'file://'+skill.path), 'utf8')).includes('BAYLEAF_API_KEY'));
   }
 }));
 
@@ -127,4 +125,53 @@ test('V1 and credential-bearing target URLs are rejected', () => run(async () =>
   const f = fixture(); await plugin.setup(f.ctx);
   await assert.rejects(() => plugin.setup({...f.ctx,app:{version:'1.9'}}), /V2/);
   await assert.rejects(() => f.tools.get('webfetch').execute({url:'https://user:pass@example.test'},context), /without credentials/);
+}));
+
+test('usage and status only read fixed routes and omit unexpected fields', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const calls=[];
+  globalThis.fetch=async(url,options)=>{
+    calls.push({url,options});
+    return Response.json({observed_at:'now',budgets:{standard:null},state:'started',phase:'ready',debug:secret});
+  };
+  const usage=JSON.parse((await f.tools.get('bayleaf_usage').execute({},context)).content);
+  assert.deepEqual(usage,{observed_at:'now',budgets:{standard:null}});
+  const status=JSON.parse((await f.tools.get('bayleaf_sandbox_status').execute({},context)).content);
+  assert.deepEqual(status,{machine:{state:'started'},browser:{phase:'ready'}});
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/usage','/sandbox','/sandbox/browser/status']);
+  assert.ok(calls.every(c=>c.options.method==='GET'&&c.options.body===undefined));
+  globalThis.fetch=async()=>Response.json({budgets:{nested:secret}});
+  await assert.rejects(()=>f.tools.get('bayleaf_usage').execute({},context),/Unexpected/);
+}));
+
+test('exposure permissions distinguish access scope; output strips provider data; revoke uses DELETE', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const calls=[];
+  globalThis.fetch=async(url,options)=>{
+    if(String(url).startsWith('http:'))return f.fetcher(url,options);
+    calls.push({url,options});
+    return options.method==='DELETE'?new Response(null,{status:204}):Response.json({
+      url:'https://owner-private-test.bayleaf-proxies.dev/',expires_at:'2026-10-07T00:00:00Z',debug:secret});
+  };
+  for(const access of [undefined,'public']) {
+    const output=JSON.parse((await f.tools.get('bayleaf_expose').execute({port:8000,access},context)).content);
+    assert.equal(output.access,access??'private');assert.equal(output.debug,undefined);
+  }
+  assert.deepEqual(f.calls.map(c=>JSON.parse(c.options.body).resources),[['private:8000'],['public:8000']]);
+  await f.tools.get('bayleaf_unexpose').execute({port:8000},context);
+  assert.equal(calls.at(-1).options.method,'DELETE');
+  assert.equal(new URL(calls.at(-1).url).pathname,'/sandbox/expose/8000');
+  const before=f.calls.length;
+  await assert.rejects(()=>f.tools.get('bayleaf_expose').execute({port:3100},context),/reserved/);
+  assert.equal(f.calls.length,before);
+}));
+
+test('denied exposure never changes server state; malformed URLs never reach output', () => run(async () => {
+  const denied=fixture('deny');globalThis.fetch=denied.fetcher;await plugin.setup(denied.ctx);
+  await assert.rejects(()=>denied.tools.get('bayleaf_expose').execute({port:8000},context),/denied/);
+  assert.equal(denied.calls.length,1);
+  const f=fixture();await plugin.setup(f.ctx);
+  for(const url of ['https://evil.test/','https://user:pass@x.bayleaf-proxies.dev/','https://x.bayleaf-proxies.dev/?token=secret']) {
+    globalThis.fetch=(target,options)=>String(target).startsWith('http:')?f.fetcher(target,options):
+      Response.json({url,expires_at:'2026-10-07T00:00:00Z'});
+    await assert.rejects(()=>f.tools.get('bayleaf_expose').execute({port:8000},context),/Unexpected preview/);
+  }
 }));

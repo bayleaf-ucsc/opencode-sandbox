@@ -1,75 +1,63 @@
 ---
 name: bayleaf-sandbox-technique
-description: Understand your environment as an OpenCode/OpenChamber agent inside a BayLeaf sandbox. Use for questions about available inference budget, model access, sandbox persistence, browser previews, credentials, BayLeaf services, privacy, or what this platform is and who operates it.
+description: Understand the BayLeaf Sandbox shared workspace, persistence, previews, budgets, privacy, and connections to Chat and the API. Use when environment context is needed beyond tool descriptions.
 ---
 
-# Your BayLeaf sandbox
+# BayLeaf Sandbox
 
-You are running in a persistent Linux sandbox shared with BayLeaf Chat and the
-sandbox API. OpenChamber is the browser interface; OpenCode runs the agent.
-Your default project is `/home/daytona/workspace`. Browser users are on a
-different computer: their localhost is not this sandbox's localhost.
+BayLeaf Sandbox is a persistent, isolated workspace where you and an AI agent
+can build, run, and preview projects through a browser. The browser workspace,
+Chat's Lathe tools, and the BayLeaf API operate on the same files and processes.
+OpenChamber supplies the browser interface; OpenCode runs the agent; Daytona
+supplies the underlying Linux sandbox. These are implementation details, not
+separate user workspaces.
 
-## Live self-knowledge
+Your default project is `/home/daytona/workspace`. The user's computer is
+elsewhere: their localhost is not this sandbox's localhost.
 
-Run the helper relative to this skill's directory:
+## Use the tools directly
 
-```sh
-python3 scripts/status.py usage
-python3 scripts/status.py sandbox
-python3 scripts/status.py browser
-```
+- `bayleaf_usage`: current budgets and allowances, without spending inference.
+- `bayleaf_sandbox_status`: machine and browser-work-period status, without waking
+  compute or renewing the work period.
+- `bayleaf_expose`: expose a running web server's port. Private is the default;
+  public means anyone with the URL can access it. Explicitly choose that scope.
+- `bayleaf_unexpose`: revoke a port's preview without stopping its server.
+- `websearch` and `webfetch`: BayLeaf search and public-page extraction.
 
-- `usage` reads `/usage`: standard inference spend and enabled request-count
-  allowances, including Sealed. It does not spend inference credits, provision
-  provider keys, or start compute. It reports when a budget is unavailable.
-- `sandbox` reads `/sandbox`: machine status and resources without waking it.
-- `browser` reads `/sandbox/browser/status`: work-period and setup metadata.
+Credentials are supplied internally. Never print credentials or the environment,
+enable HTTP tracing, or put credentials in tool arguments.
 
-Budgets are shared with the owner's other clients, not assigned to this session.
-USD and request counts are different units; never add them. A null budget is
-unknown, not unlimited. Use returned timestamps/reset fields; do not infer today's
-spend from lifetime usage. Sealed's allowance does not mean this running agent
-uses Sealed: its normal BayLeaf provider is the standard plaintext lane.
+## Preview a project
 
-The helper reads the owner's credential internally from
-`~/.local/share/bayleaf/browser/credentials/owner-key`, with an environment fallback.
-Never display that file, print the environment, enable shell/HTTP tracing, or put
-a credential in a tool argument. Report the helper's safe results, not raw auth
-responses. Installed helper source contains no secrets and can be inspected.
+Start its web server using the shell, bind to `0.0.0.0`, and select a port in
+3000–9999 except reserved port 3100. Check localhost from inside the sandbox,
+then call `bayleaf_expose`. Give the user the returned HTTPS URL, not localhost
+or a raw provider proxy URL. Private URLs require owner login. Re-exposing the
+same port replaces its preview. Stop the server separately when finished.
+Use localhost tools for internal checks: `webfetch` cannot read private previews.
 
-## Platform questions
+## Persistence and budgets
 
-For purpose, capabilities, and institutional context, read **https://bayleaf.dev**.
+- Files and agent histories persist. Processes do not survive sleep. Deleting
+  the sandbox destroys its files and histories.
+- Browser work periods last up to six hours and require deliberate renewal.
+  Idle sleep can occur sooner. Passive status checks do not renew work.
+- Budgets are shared with the owner's other clients. Dollars and request counts
+  are different units. Null is unknown, not unlimited or zero. Use response
+  timestamps/reset fields; lifetime usage is not today's usage.
+- A Sealed allowance does not mean this agent uses Sealed. The normal configured
+  provider uses the standard plaintext inference lane with ZDR providers.
+- Sandbox files, histories, and credentials deliberately persist. This storage
+  is not zero-operator-access storage.
+
+## Platform context
+
 BayLeaf is a situated counterplatform for Generative AI at UC Santa Cruz,
-operated by Adam Smith. For details, follow the public sources:
+operated by Adam Smith. Consult https://bayleaf.dev, the public repository at
+https://github.com/bayleaf-ucsc/bayleaf, its PRIVACY.md, and
+https://api.bayleaf.dev/docs/openapi.json when relevant. Live API results describe
+the current account and machine; public main can lag deployment.
 
-- https://github.com/bayleaf-ucsc/bayleaf
-- https://raw.githubusercontent.com/bayleaf-ucsc/bayleaf/main/PRIVACY.md
-- https://raw.githubusercontent.com/bayleaf-ucsc/bayleaf/main/api/SANDBOX-BROWSER.md
-- https://api.bayleaf.dev/llms.txt
-- https://api.bayleaf.dev/docs/openapi.json
-
-Use live API results for the current account and machine. Public repo `main`
-can lag deployed code; do not treat an absent document or older revision as proof
-that a live feature is unavailable. Name the source when resolving a discrepancy.
-Fetch relevant documents on demand rather than cloning or reading the whole repo.
-
-## What persists and what expires
-
-- Files and agent histories persist in the sandbox. Processes and terminals do
-  not survive sleep. Deleting the sandbox destroys these files and histories.
-- Dashboard browser access lasts up to six hours and requires deliberate renewal.
-  Idle sleep can happen earlier. Passive status checks do not renew work.
-- Setup uses isolated tooling under `~/.local/share/bayleaf/browser`; it does not
-  replace global OpenCode or project configuration.
-- BayLeaf-provided skills and their helpers live in a versioned plugin package.
-  Remote configuration delivers reviewed updates while OpenCode is running.
-  Put personal additions in your own skill folder, not the installed package.
-- To preview a running website, load **expose-sandbox-ports-technique**.
-  Prefer private exposure; bind the service to 0.0.0.0. Port 3100 is reserved.
-- Inference uses BayLeaf's approved ZDR providers. Sandbox files, histories, and
-  credentials deliberately persist and are not zero-operator-access storage.
-
-Do not promise capabilities based on a model's training knowledge. Check current
-tools, configuration, API responses, and the relevant platform documentation.
+Plugin tools and skills update through remote configuration while OpenCode is
+running. Put personal skills in your own skill folder, not the installed package.
