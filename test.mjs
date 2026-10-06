@@ -58,8 +58,11 @@ async function run(fn) {
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
   assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_unexpose','bayleaf_usage','webfetch']);
-  assert.deepEqual([...f.skills.keys()], ['bayleaf-sandboxes']);
+  assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-sandboxes', 'bayleaf-scheduling']);
   for (const skill of f.skills.values()) {
+    assert.equal(skill.name, skill.id);
+    assert.match(skill.id, /^[a-z0-9]+(-[a-z0-9]+)*$/);
+    assert.ok(skill.description.length <= 1024);
     assert.ok(skill.content.startsWith('\n#') || skill.content.startsWith('#'));
     assert.ok(!skill.content.startsWith('---'));
     assert.ok((await readFile(skill.path, 'utf8')).includes(skill.description));

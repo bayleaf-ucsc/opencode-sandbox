@@ -22,6 +22,8 @@ elsewhere: their localhost is not this sandbox's localhost.
   public means anyone with the URL can access it. Explicitly choose that scope.
 - `bayleaf_unexpose`: revoke a port's preview without stopping its server.
 - `websearch` and `webfetch`: BayLeaf search and public-page extraction.
+- Before scheduling delayed or recurring work with OpenChamber `schedule.*`,
+  load `bayleaf-scheduling`: persistent task definitions do not keep compute awake.
 
 Credentials are supplied internally. Never print credentials or the environment,
 enable HTTP tracing, or put credentials in tool arguments.

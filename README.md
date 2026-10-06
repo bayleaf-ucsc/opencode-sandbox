@@ -9,7 +9,8 @@ Tested with OpenCode 2.0.23.
 - Adds `bayleaf_usage`, `bayleaf_expose`, and
   `bayleaf_unexpose`. Read-only inspection has no lifecycle effects; preview
   mutations request permission with port and access scope as the resource.
-- Registers one environment-guidance skill directly from `skills/`.
+- Registers environment guidance and a scheduling-lifecycle skill directly from
+  `skills/`. Scheduling remains OpenChamber's tool surface, not a plugin tool.
 
 The managed environment supplies `BAYLEAF_API_KEY`, `BAYLEAF_OPENCODE_URL`
 and `OPENCODE_PASSWORD`. Search and extraction use BayLeaf's plaintext web
