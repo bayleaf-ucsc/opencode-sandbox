@@ -18,8 +18,6 @@ elsewhere: their localhost is not this sandbox's localhost.
 ## Use the tools directly
 
 - `bayleaf_usage`: current budgets and allowances, without spending inference.
-- `bayleaf_sandbox_status`: machine and browser-work-period status, without waking
-  compute or renewing the work period.
 - `bayleaf_expose`: expose a running web server's port. Private is the default;
   public means anyone with the URL can access it. Explicitly choose that scope.
 - `bayleaf_unexpose`: revoke a port's preview without stopping its server.

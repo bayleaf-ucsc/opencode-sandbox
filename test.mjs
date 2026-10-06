@@ -57,7 +57,7 @@ async function run(fn) {
 
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
-  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_sandbox_status','bayleaf_unexpose','bayleaf_usage','webfetch']);
+  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_unexpose','bayleaf_usage','webfetch']);
   assert.deepEqual([...f.skills.keys()], ['bayleaf-sandbox-technique']);
   for (const skill of f.skills.values()) {
     assert.ok(skill.content.startsWith('\n#') || skill.content.startsWith('#'));
@@ -127,7 +127,7 @@ test('V1 and credential-bearing target URLs are rejected', () => run(async () =>
   await assert.rejects(() => f.tools.get('webfetch').execute({url:'https://user:pass@example.test'},context), /without credentials/);
 }));
 
-test('usage and status only read fixed routes and omit unexpected fields', () => run(async () => {
+test('usage only reads its fixed route and omits unexpected fields', () => run(async () => {
   const f=fixture();await plugin.setup(f.ctx);const calls=[];
   globalThis.fetch=async(url,options)=>{
     calls.push({url,options});
@@ -135,9 +135,7 @@ test('usage and status only read fixed routes and omit unexpected fields', () =>
   };
   const usage=JSON.parse((await f.tools.get('bayleaf_usage').execute({},context)).content);
   assert.deepEqual(usage,{observed_at:'now',budgets:{standard:null}});
-  const status=JSON.parse((await f.tools.get('bayleaf_sandbox_status').execute({},context)).content);
-  assert.deepEqual(status,{machine:{state:'started'},browser:{phase:'ready'}});
-  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/usage','/sandbox','/sandbox/browser/status']);
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/usage']);
   assert.ok(calls.every(c=>c.options.method==='GET'&&c.options.body===undefined));
   globalThis.fetch=async()=>Response.json({budgets:{nested:secret}});
   await assert.rejects(()=>f.tools.get('bayleaf_usage').execute({},context),/Unexpected/);

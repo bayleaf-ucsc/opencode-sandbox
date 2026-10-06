@@ -158,16 +158,6 @@ export default {
         description: 'Read BayLeaf account budgets and remaining allowances. Read-only: does not provision keys or spend inference credits. Unknown balances are not zero.',
         input: empty, execute: async (_, context) => result(select(
           await post('/usage', undefined, context.signal, 30, 'GET'), ['observed_at', 'budgets'])) });
-      editor.add({ name: 'bayleaf_sandbox_status', options: { codemode: false },
-        description: 'Read BayLeaf Sandbox machine and browser workspace status. Does not wake compute, extend a work period, or start applications.',
-        input: empty, execute: async (_, context) => {
-          const [machine, browser] = await Promise.all([
-            post('/sandbox', undefined, context.signal, 30, 'GET'),
-            post('/sandbox/browser/status', undefined, context.signal, 30, 'GET'),
-          ]);
-          return result({ machine: select(machine, ['id','state','cpu','memory','disk','createdAt','autoStopInterval','autoArchiveInterval']),
-            browser: select(browser, ['phase','machine','progress','deadline','updated_at','error']) });
-        } });
       const port = { type: 'integer', minimum: 3000, maximum: 9999, description: 'Server port; 3100 is reserved.' };
       editor.add({ name: 'bayleaf_expose', options: { codemode: false },
         description: 'Expose a running BayLeaf Sandbox web server. Bind the server to 0.0.0.0 first. Private access requires owner login; public access makes the URL available to anyone. Replaces the preview for this port. Returns a shareable HTTPS URL and expiry.',
