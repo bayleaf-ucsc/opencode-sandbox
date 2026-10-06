@@ -1,0 +1,14 @@
+{
+  "name": "@bayleaf-ucsc/opencode-sandbox",
+  "version": "0.1.0",
+  "description": "BayLeaf web tools and curated skills for hosted OpenCode V2 sandboxes",
+  "type": "module",
+  "exports": { ".": "./index.mjs", "./server": "./index.mjs" },
+  "files": ["index.mjs", "skills/"],
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test test.mjs"
+  },
+  "private": true,
+  "license": "MIT"
+}
