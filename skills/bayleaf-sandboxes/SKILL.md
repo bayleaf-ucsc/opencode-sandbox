@@ -1,5 +1,5 @@
 ---
-name: bayleaf-sandbox-technique
+name: bayleaf-sandboxes
 description: Understand the BayLeaf Sandbox shared workspace, persistence, previews, budgets, privacy, and connections to Chat and the API. Use when environment context is needed beyond tool descriptions.
 ---
 
