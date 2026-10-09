@@ -114,6 +114,21 @@ function portCheck(port) {
   }
 }
 
+function headerCheck(headers) {
+  const invalid = () => { throw new Error('Invalid upstream header configuration'); };
+  if (!headers || typeof headers !== 'object' || Array.isArray(headers)) invalid();
+  const entries = Object.entries(headers);
+  const names = entries.map(([name]) => name.toLowerCase());
+  const reserved = new Set(['host','cookie','origin','referer','forwarded','x-real-ip','true-client-ip',
+    'connection','upgrade','keep-alive','te','trailer','transfer-encoding','content-length','expect',
+    'http2-settings','proxy-authorization','proxy-authenticate']);
+  if (entries.length > 16 || new Set(names).size !== entries.length ||
+      entries.some(([name, value]) => name.length < 1 || name.length > 64 || /[^!#$%&'*+.^_`|~0-9A-Za-z-]/.test(name) ||
+        reserved.has(name.toLowerCase()) || /^(?:x-forwarded-|sec-|cf-|daytona-|x-daytona-|x-lathe-)/i.test(name) ||
+        typeof value !== 'string' || value.length > 4096 || /[^\x20-\x7e]/.test(value)) ||
+      entries.reduce((size, [name, value]) => size + name.length + value.length, 0) > 8192) invalid();
+}
+
 async function skills() {
   const base = new URL('./skills/', import.meta.url);
   const result = [];
@@ -160,13 +175,19 @@ export default {
           await post('/usage', undefined, context.signal, 30, 'GET'), ['observed_at', 'budgets'])) });
       const port = { type: 'integer', minimum: 3000, maximum: 9999, description: 'Server port; 3100 is reserved.' };
       editor.add({ name: 'bayleaf_expose', options: { codemode: false },
-        description: 'Expose a running BayLeaf Sandbox web server. Bind the server to 0.0.0.0 first. Private access requires owner login; public access makes the URL available to anyone. Replaces the preview for this port. Returns a shareable HTTPS URL and expiry.',
-        input: { type: 'object', properties: { port, access: { type: 'string', enum: ['private','public'], default: 'private' } }, required: ['port'], additionalProperties: false },
-        execute: async ({ port, access = 'private' }, context) => {
+        description: 'Expose a running BayLeaf Sandbox web server. Bind the server to 0.0.0.0 first. Private access requires owner login; public access makes the URL available to anyone. Optional upstream_headers inject fixed application headers on HTTP and WebSocket requests in either access mode. Public visitors can use injected credentials. Never supply platform keys. Replaces the preview for this port. Returns a shareable HTTPS URL and expiry.',
+        input: { type: 'object', properties: { port, access: { type: 'string', enum: ['private','public'], default: 'private' },
+          upstream_headers: { type: 'object', maxProperties: 16, additionalProperties: { type: 'string', maxLength: 4096 },
+            description: 'Fixed application headers, including Authorization/Basic. HTTP-token names up to 64 ASCII bytes, printable ASCII values, 8192 total bytes. No routing, transport, browser-security or provider-reserved headers. Values are visible in tool arguments; not visitor identity.' } }, required: ['port'], additionalProperties: false },
+        execute: async ({ port, access = 'private', upstream_headers = {} }, context) => {
           portCheck(port);
           if (!['private','public'].includes(access)) throw new Error('Choose private or public access');
+          headerCheck(upstream_headers);
+          const hasHeaders = Object.keys(upstream_headers).length > 0;
           await approveFetch(ctx, context, `${access}:${port}`, 'bayleaf_expose');
-          const data = await post('/sandbox/expose', { port, access }, context.signal);
+          const data = await post('/sandbox/expose', { port, access,
+            ...(hasHeaders ? { upstream_headers } : {}) }, context.signal);
+          if (hasHeaders && data.upstream_headers_applied !== true) throw new Error('Preview did not acknowledge upstream headers');
           let url;
           try { url = new URL(data.url); } catch { throw new Error('Unexpected preview response'); }
           if (url.protocol !== 'https:' || !url.hostname.endsWith('.bayleaf-proxies.dev') ||
@@ -174,7 +195,8 @@ export default {
               typeof data.expires_at !== 'string' || !Number.isFinite(Date.parse(data.expires_at))) {
             throw new Error('Unexpected preview response');
           }
-          return result({ url: url.href, expires_at: data.expires_at, access });
+          return result({ url: url.href, expires_at: data.expires_at, access,
+            ...(hasHeaders ? { upstream_headers_applied: true } : {}) });
         } });
       editor.add({ name: 'bayleaf_unexpose', options: { codemode: false },
         description: 'Revoke the preview for a BayLeaf Sandbox port. Leaves the server process running.',

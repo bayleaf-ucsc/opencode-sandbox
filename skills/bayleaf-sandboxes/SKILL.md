@@ -25,8 +25,8 @@ elsewhere: their localhost is not this sandbox's localhost.
 - Before scheduling delayed or recurring work with OpenChamber `schedule.*`,
   load `bayleaf-scheduling`: persistent task definitions do not keep compute awake.
 
-Credentials are supplied internally. Never print credentials or the environment,
-enable HTTP tracing, or put credentials in tool arguments.
+Platform credentials are supplied internally. Never print them or the environment,
+enable HTTP tracing, or put platform credentials in tool arguments.
 
 ## Preview a project
 
@@ -36,6 +36,21 @@ then call `bayleaf_expose`. Give the user the returned HTTPS URL, not localhost
 or a raw provider proxy URL. Private URLs require owner login. Re-exposing the
 same port replaces its preview. Stop the server separately when finished.
 Use localhost tools for internal checks: `webfetch` cannot read private previews.
+
+Optional `upstream_headers` configures fixed application headers in either access
+mode, for example `{"X-Authenticated-Owner":"true"}` or an application-only
+`Authorization` credential (including Basic). It is ordinary proxy configuration,
+not a separate approval or an identity mapping. Private owner login still happens
+first; public visitors can exercise injected credentials. Values overwrite browser
+headers case-insensitively on HTTP and WebSocket handshakes. Nonempty headers must
+receive `upstream_headers_applied: true`; never fall back to a raw provider URL.
+Use at most 16 entries, 64-byte HTTP-token names, 4096-byte printable ASCII values,
+and 8192 total name/value bytes. Routing, framing, transport, browser-security and
+provider-reserved headers are rejected. Never use BayLeaf, installation, session,
+or provider credentials as app credentials. Application credentials in these tool
+arguments remain in agent history and applications may reflect them. Header
+assertions alone neither identify visitors nor prevent direct-upstream spoofing:
+qualify the app's trusted-peer and alternate-route boundary separately.
 
 ## Persistence and budgets
 

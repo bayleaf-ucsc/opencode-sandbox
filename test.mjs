@@ -176,3 +176,33 @@ test('denied exposure never changes server state; malformed URLs never reach out
     await assert.rejects(()=>f.tools.get('bayleaf_expose').execute({port:8000},context),/Unexpected preview/);
   }
 }));
+
+test('headers use ordinary exposure permission, require exact acknowledgement and omit secrets from results', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const calls=[];
+  const config={Authorization:'Basic '+Buffer.from('app:app-password').toString('base64'), 'X-App-Assertion':'app-secret'};
+  let acknowledgement=true;
+  globalThis.fetch=async(url,options)=>{
+    if(String(url).startsWith('http:'))return f.fetcher(url,options);
+    calls.push(JSON.parse(options.body));
+    return Response.json({url:'https://owner-private-test.bayleaf-proxies.dev/',expires_at:'2026-10-09T00:00:00Z',
+      upstream_headers_applied:acknowledgement, upstream_headers:config});
+  };
+  for(const access of ['private','public']) {
+    const output=JSON.parse((await f.tools.get('bayleaf_expose').execute({port:8000,access,upstream_headers:config},context)).content);
+    assert.equal(output.upstream_headers_applied,true);
+    assert.equal(output.upstream_headers,undefined);
+    assert.deepEqual(calls.at(-1),{port:8000,access,upstream_headers:config});
+  }
+  assert.deepEqual(f.calls.map(c=>JSON.parse(c.options.body).resources),[['private:8000'],['public:8000']]);
+  assert.ok(!JSON.stringify(f.calls).includes('app-secret'));
+  for(const ack of [undefined,false,'true',1,null]) {
+    acknowledgement=ack;
+    await assert.rejects(()=>f.tools.get('bayleaf_expose').execute({port:8000,upstream_headers:config},context),/acknowledge/);
+  }
+  for(const upstream_headers of [null,[],{Host:'secret'}, {A:'x',a:'y'}, {A:123}, {A:'bad\r\n'},
+    {'A\n':'secret'}, {A:'secret\n'}, {A:'secret\r'}, {A:'x'.repeat(4097)}]) {
+    const before=f.calls.length;
+    await assert.rejects(()=>f.tools.get('bayleaf_expose').execute({port:8000,upstream_headers},context),/Invalid upstream/);
+    assert.equal(f.calls.length,before);
+  }
+}));
