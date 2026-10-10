@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import plugin from './index.mjs';
 
-const secret = 'sk-bayleaf-synthetic-never-print';
+const secret = 'dtn_secret_synthetic_never_print';
 const context = { sessionID: 'ses_fixture', agent: 'build', messageID: 'msg_fixture', id: 'call_fixture',
   signal: new AbortController().signal };
 

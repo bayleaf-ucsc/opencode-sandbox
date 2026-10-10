@@ -8,7 +8,8 @@ const MAX_BYTES = 2 * 1024 * 1024;
 // web facet (Tavily), not the encrypted Sealed inference lane.
 async function post(path, body, signal, timeout = 30, method = 'POST') {
   const key = process.env.BAYLEAF_API_KEY;
-  if (!key?.startsWith('sk-bayleaf-') || key.startsWith('sk-bayleaf-grant-')) {
+  const placeholder = /^dtn_secret_[A-Za-z0-9_-]+$/.test(key ?? '');
+  if (!placeholder && (!key?.startsWith('sk-bayleaf-') || key.startsWith('sk-bayleaf-grant-'))) {
     throw new Error('BayLeaf owner credential unavailable');
   }
   try {
