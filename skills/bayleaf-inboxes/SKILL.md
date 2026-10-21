@@ -134,7 +134,7 @@ understands that each run spends sandbox time and that sleeping sandboxes miss r
 - Inbox content is **stored**, unlike BayLeaf inference: it is not zero-data-retention
   and not zero-operator-access. Each message is deleted 90 days after receipt.
   Archiving or reading never extends that. Reads never mark anything read.
-- Per account: 10 inboxes, 500 MiB. Per inbox: 200 MiB, 5000 messages, 1000
+- Per account: 100 inboxes (including those still destroying), 500 MiB. Per inbox: 200 MiB, 5000 messages, 1000
   receipts per UTC day. Over-quota senders are refused, not queued.
 - Addresses are random, never reused, and not secrets: DNS, TLS and mail relays
   see them. Share them like an email address, not like a password.
