@@ -9,8 +9,20 @@ Tested with OpenCode 2.0.23.
 - Adds `bayleaf_usage`, `bayleaf_expose`, and
   `bayleaf_unexpose`. Read-only inspection has no lifecycle effects; preview
   mutations request permission with port and access scope as the resource.
-- Registers environment guidance and a scheduling-lifecycle skill directly from
-  `skills/`. Scheduling remains OpenChamber's tool surface, not a plugin tool.
+- Adds BayLeaf Inboxes tools over the API's `/inboxes` owner facade. Reads need
+  no approval: `bayleaf_inboxes`, `bayleaf_inbox_messages` (list/search),
+  `bayleaf_inbox_read` (metadata and extracted text in
+  `<untrusted_inbox_content>` markers) and `bayleaf_inbox_save` (exact body or
+  attachment bytes to a non-clobbering path confined to the working directory,
+  26 MiB cap; every save uses native permission with the exact destination path,
+  since sender bytes can plant agent instructions or configuration). Mutations request
+  permission: `bayleaf_inbox_create` (resource `email` or `http`),
+  `bayleaf_inbox_archive`, `bayleaf_inbox_delete_message` and
+  `bayleaf_inbox_destroy` (resource names the address). Webhook sender tokens
+  are deliberately not tools, so minted tokens never enter model context.
+- Registers environment guidance plus scheduling-lifecycle and inbox skills
+  directly from `skills/`. Scheduling remains OpenChamber's tool surface, not a
+  plugin tool.
 
 The managed environment supplies `BAYLEAF_API_KEY`, `BAYLEAF_OPENCODE_URL`
 and `OPENCODE_PASSWORD`. Search and extraction use BayLeaf's plaintext web
@@ -18,6 +30,14 @@ facet (Tavily), not Sealed inference. Fetch supports markdown and text extractio
 not raw HTML, authenticated pages, arbitrary API responses, or binary downloads.
 
 ## Installation
+
+Inboxes tools and the `bayleaf-inboxes` skill are disabled by default. The managed
+installer must supply `BAYLEAF_INBOXES_ENABLED=true` to the OpenCode process only
+when the API's Inboxes feature is enabled. Any other value omits both registrations
+and skips loading that skill. Setup performs no network capability checks. This
+environment flag is captured at plugin setup: changing it requires reloading the
+plugin/process (and updating existing sandbox environments), not just refreshing
+remote configuration. Installer wiring is outside this package.
 
 The BayLeaf launcher configures the environment and well-known connection.
 Its remote config disables native `opencode.tool.webfetch`, selects the BayLeaf
@@ -27,8 +47,15 @@ search provider, and installs this repository at a full commit hash:
 {"plugins":["-opencode.tool.webfetch","github:bayleaf-ucsc/opencode-sandbox#<full-commit-sha>"],"websearch":{"provider":"bayleaf"}}
 ```
 
-This package has no runtime dependencies or build step. Skills are canonical
-source files here. Run `npm test` for the plugin unit tests.
+This package has no npm runtime dependencies or build step. Inbox saves require
+`python3`, an existing dependency in hosted Linux (also required on macOS test
+hosts). A fixed isolated helper inherits an open workspace directory descriptor,
+traverses children without following symlinks, and publishes relative to the held
+parent descriptor. Approval or download waits cannot redirect writes by swapping
+a directory pathname. Downloads are bounded to 26 MiB in memory before any write;
+temporary files stay in the destination directory. No shell or credential
+environment is passed to the helper. Skills are canonical source files here.
+Run `npm test` for the plugin unit tests.
 
 ## Delivery
 
