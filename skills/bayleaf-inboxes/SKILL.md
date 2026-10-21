@@ -40,7 +40,9 @@ send to it, and the operator can technically read stored content.
 
 - **email**: the sender only knows how to email (reports, newsletters, service
   notifications, export links). Routing uses the envelope recipient exactly; no
-  plus-addressing. Up to 25 MiB per message, attachments included.
+  plus-addressing. Unrestricted mail defaults to 25 MiB, attachments included;
+  restricted mail is at most 1 MiB raw MIME. Read `bayleaf_inbox_limits` for the
+  effective ceilings and `payload.restricted_email_creation_enabled` first.
 - **http**: the sender calls a URL (webhooks, HTML forms, `curl` from a cron job).
   Every method, path, query, header and body to that host is captured, including
   `GET` from link previews and scanners; `OPTIONS` answers CORS and is not stored.
@@ -48,6 +50,17 @@ send to it, and the operator can technically read stored content.
   programmable reply, so services that require a challenge response cannot verify it.
 
 ## Open or closed webhooks
+
+For email creation, `bayleaf_inbox_create` accepts optional `email_auth`:
+`{"domains":["example.org"],"selector_pins":{"example.org":["mail2026"]}}`.
+Omit it or pass null for unrestricted email. Exact domains authenticate delegated
+DKIM domain authority, not a person or mailbox; replay remains possible. Pins are
+optional, DNS-case-insensitive and must match the SAME passing signature as the
+domain. Underscore selectors are allowed. Agree the domains and any pins with the
+user before native approval; plan selector rotation. Policy is immutable: create
+a new inbox to change it. Readback includes canonical `email_auth` and effective
+`restricted_email_max_bytes`. Never attach email policy to HTTP inboxes, even null.
+This adds no sender-secret handling and no policy mutation tool.
 
 A new http inbox is **open**: any request to its URL is stored. It becomes
 **closed** once the user mints at least one sender token; then requests must carry

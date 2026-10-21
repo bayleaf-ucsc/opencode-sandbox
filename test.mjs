@@ -6,6 +6,26 @@ import { join } from 'node:path';
 import plugin from './index.mjs';
 
 const secret = 'dtn_secret_synthetic_never_print';
+test('creation-only email policy validates before permission/network and preserves canonical readback', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const tool=f.tools.get('bayleaf_inbox_create');let writes=[];
+  assert.ok(tool.input.properties.email_auth.anyOf);
+  globalThis.fetch=async(url,init)=>String(url).startsWith('http:')?f.fetcher(url,init):
+    (writes.push(JSON.parse(init.body)),Response.json({id:'ibx_'+'a'.repeat(26),...JSON.parse(init.body),restricted_email_max_bytes:900000}));
+  for(const email_auth of [{},[],{domains:[]},{domains:['*.example.org']},{domains:['a@example.org']},{domains:['example.org','EXAMPLE.ORG']},{domains:['example.org'],selector_pins:{'other.org':['s']}},{domains:['example.org'],selector_pins:{'example.org':['x','X']}},{domains:['example.org'],selector_pins:{'example.org':['a'.repeat(64)]}},{domains:['example.org'],extra:true}])
+    await assert.rejects(()=>tool.execute({type:'email',email_auth},context));
+  for(const email_auth of [null,{domains:['example.org']}])await assert.rejects(()=>tool.execute({type:'http',email_auth},context));
+  assert.equal(writes.length,0);assert.equal(f.calls.length,0);
+  for(const email_auth of [undefined,null,{domains:['EXAMPLE.ORG'],selector_pins:{'EXAMPLE.ORG':['Mail_2026']}}]){
+    const out=JSON.parse((await tool.execute({type:'email',...(email_auth===undefined?{}:{email_auth})},context)).content);
+    assert.equal(out.restricted_email_max_bytes,900000);
+    if(email_auth)assert.deepEqual(out.email_auth,{domains:['example.org'],selector_pins:{'example.org':['mail_2026']}});
+    else assert.equal(out.email_auth,email_auth);
+  }
+  assert.ok(!Object.hasOwn(writes[0],'email_auth'));assert.equal(writes[1].email_auth,null);
+  const denied=fixture('deny');await plugin.setup(denied.ctx);
+  globalThis.fetch=async(url,init)=>denied.fetcher(url,init);
+  await assert.rejects(()=>denied.tools.get('bayleaf_inbox_create').execute({type:'email',email_auth:{domains:['example.org']}},context),/denied/);
+}));
 test('limits use owner GET, preserve overrides and reject malformed capacity without defaults', () => run(async () => {
   const f=fixture('deny');await plugin.setup(f.ctx);
   const payload={owner:{max_inboxes:17,inboxes:3,remaining_inboxes:14,max_bytes:500,bytes:30,remaining_bytes:470,messages:2},per_inbox:{max_bytes:200,max_messages:50,max_daily_receipts:10,max_credentials:4},payload:{http_max_bytes:100,email_max_bytes:100,restricted_email_max_bytes:50,restricted_email_creation_enabled:false},lifetime:{min_seconds:60,max_seconds:600,presets_seconds:{},default_ttl_seconds:null},retention_seconds:1000,destroy_quiesce_seconds:0};
