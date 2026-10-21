@@ -134,8 +134,15 @@ understands that each run spends sandbox time and that sleeping sandboxes miss r
 - Inbox content is **stored**, unlike BayLeaf inference: it is not zero-data-retention
   and not zero-operator-access. Each message is deleted 90 days after receipt.
   Archiving or reading never extends that. Reads never mark anything read.
-- Per account: 100 inboxes (including those still destroying), 500 MiB. Per inbox: 200 MiB, 5000 messages, 1000
+- Defaults, not a promise of current capacity: per account 100 inboxes (including
+  those still destroying), 500 MiB. Per inbox: 200 MiB, 5000 messages, 1000
   receipts per UTC day. Over-quota senders are refused, not queued.
+- Before capacity planning or creation, call `bayleaf_inbox_limits` (no arguments).
+  For direct scripts, read authenticated `GET /inboxes/limits` with the
+  existing owner bearer. It reports authoritative enforcement limits and current
+  owner usage/remaining capacity. Never ask for or expose the bearer; sender
+  tokens, Campus Pass and inference grants do not establish owner authority.
+  If unavailable, report current capacity as unknown rather than assuming defaults.
 - Addresses are random, never reused, and not secrets: DNS, TLS and mail relays
   see them. Share them like an email address, not like a password.
 

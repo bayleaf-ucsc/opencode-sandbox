@@ -6,6 +6,17 @@ import { join } from 'node:path';
 import plugin from './index.mjs';
 
 const secret = 'dtn_secret_synthetic_never_print';
+test('limits use owner GET, preserve overrides and reject malformed capacity without defaults', () => run(async () => {
+  const f=fixture('deny');await plugin.setup(f.ctx);
+  const payload={owner:{max_inboxes:17,inboxes:3,remaining_inboxes:14,max_bytes:500,bytes:30,remaining_bytes:470,messages:2},per_inbox:{max_bytes:200,max_messages:50,max_daily_receipts:10,max_credentials:4},payload:{http_max_bytes:100,email_max_bytes:100,restricted_email_max_bytes:50,restricted_email_creation_enabled:false},lifetime:{min_seconds:60,max_seconds:600,presets_seconds:{},default_ttl_seconds:null},retention_seconds:1000,destroy_quiesce_seconds:0};
+  globalThis.fetch=async(url,init)=>{assert.equal(String(url),'https://api.bayleaf.dev/inboxes/limits');assert.equal(init.method,'GET');assert.ok(init.headers.Authorization);return Response.json({...payload,private:'omit'});};
+  const tool=f.tools.get('bayleaf_inbox_limits');
+  assert.deepEqual(JSON.parse((await tool.execute({},context)).content),payload);
+  payload.owner.remaining_inboxes=-1;
+  await assert.rejects(()=>tool.execute({},context),/limits response/);
+  globalThis.fetch=async()=>new Response('private',{status:503});
+  await assert.rejects(()=>tool.execute({},context));
+}));
 const context = { sessionID: 'ses_fixture', agent: 'build', messageID: 'msg_fixture', id: 'call_fixture',
   signal: new AbortController().signal };
 
@@ -95,7 +106,7 @@ async function run(fn) {
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
   assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_inbox_archive','bayleaf_inbox_create',
-    'bayleaf_inbox_delete_message','bayleaf_inbox_destroy','bayleaf_inbox_events','bayleaf_inbox_lifetime','bayleaf_inbox_messages','bayleaf_inbox_read',
+    'bayleaf_inbox_delete_message','bayleaf_inbox_destroy','bayleaf_inbox_events','bayleaf_inbox_lifetime','bayleaf_inbox_limits','bayleaf_inbox_messages','bayleaf_inbox_read',
     'bayleaf_inbox_save','bayleaf_inboxes','bayleaf_unexpose','bayleaf_usage','webfetch']);
   assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-inboxes', 'bayleaf-sandboxes', 'bayleaf-scheduling']);
   for (const skill of f.skills.values()) {
