@@ -16,10 +16,18 @@ Tested with OpenCode 2.0.23.
   attachment bytes to a non-clobbering path confined to the working directory,
   26 MiB cap; every save uses native permission with the exact destination path,
   since sender bytes can plant agent instructions or configuration). Mutations request
-  permission: `bayleaf_inbox_create` (resource `email` or `http`),
+  permission: `bayleaf_inbox_create` (resource includes type and any explicit lifetime),
   `bayleaf_inbox_archive`, `bayleaf_inbox_delete_message` and
   `bayleaf_inbox_destroy` (resource names the address). Webhook sender tokens
   are deliberately not tools, so minted tokens never enter model context.
+- Creation accepts `ttl_seconds` (60–2592000) or `preset: "experiment"` (15
+  minutes), never both. `bayleaf_inbox_lifetime` sets/shortens a deadline under
+  native approval; it cannot extend or remove one. Expiry destroys the endpoint
+  and stored content. Inbox results retain `expires_at` and `cleanup_not_before`.
+  `bayleaf_inbox_events` reads one bounded finite arrival page, retaining empty
+  checkpoints and mapping HTTP 410 to replay/resynchronization guidance. It does
+  not start a background watcher. Live SSE and bulk export remain explicitly
+  requested script/API workflows described in the inbox skill.
 - Registers environment guidance plus scheduling-lifecycle and inbox skills
   directly from `skills/`. Scheduling remains OpenChamber's tool surface, not a
   plugin tool.

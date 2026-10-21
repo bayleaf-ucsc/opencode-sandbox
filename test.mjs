@@ -9,6 +9,40 @@ const secret = 'dtn_secret_synthetic_never_print';
 const context = { sessionID: 'ses_fixture', agent: 'build', messageID: 'msg_fixture', id: 'call_fixture',
   signal: new AbortController().signal };
 
+test('lifetimes validate before permission, preserve expiry, and reject mutation without approval', () => run(async () => {
+  const id='ibx_'+'a'.repeat(26);
+  for(const effect of ['allow','deny']){
+    const f=fixture(effect);await plugin.setup(f.ctx);
+    globalThis.fetch=async(url,init)=>String(url).startsWith('http:')?f.fetcher(url,init):
+      (f.calls.push({url:String(url),options:init}),Response.json({id,type:'http',expires_at:1900000000,cleanup_not_before:1900000900}));
+    const create=f.tools.get('bayleaf_inbox_create'),update=f.tools.get('bayleaf_inbox_lifetime');
+    for(const args of [{ttl_seconds:59},{ttl_seconds:1.5},{ttl_seconds:2592001},{preset:'other'},{ttl_seconds:60,preset:'experiment'}])
+      await assert.rejects(()=>create.execute({type:'http',...args},context));
+    await assert.rejects(()=>update.execute({inbox_id:id},context));assert.equal(f.calls.length,0);
+    for(const [tool,args]of [[create,{type:'http',preset:'experiment'}],[update,{inbox_id:id,ttl_seconds:60}]]){
+      if(effect==='deny')await assert.rejects(()=>tool.execute(args,context),/denied/);
+      else{const r=JSON.parse((await tool.execute(args,context)).content);assert.equal(r.expires_at,1900000000);assert.equal(r.cleanup_not_before,1900000900);}
+    }
+    const writes=f.calls.filter(c=>c.url.startsWith('https:'));
+    assert.equal(writes.length,effect==='deny'?0:2);
+    if(effect==='allow'){assert.deepEqual(JSON.parse(writes[0].options.body),{type:'http',preset:'experiment'});assert.equal(writes[1].options.method,'PATCH');}
+  }
+}));
+
+test('finite arrival pages preserve empty checkpoints, bound input/output and explain 410', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const tool=f.tools.get('bayleaf_inbox_events'),id='ibx_'+'a'.repeat(26);
+  let calls=0,payload={events:[],cursor:'opaque_cursor',more:false};
+  globalThis.fetch=async(url,init)=>{calls++;assert.equal(init.method,'GET');assert.ok(String(url).includes('/events?limit=25&after=now'));return Response.json(payload);};
+  assert.deepEqual(JSON.parse((await tool.execute({inbox_id:id,after:'now'},context)).content),payload);assert.equal(calls,1);
+  for(const after of ['', 'x'.repeat(201),'a&limit=999',123,['now']])await assert.rejects(()=>tool.execute({inbox_id:id,after},context));
+  assert.equal(calls,1);
+  payload={events:[{event_id:'evt_1',type:'message.received',message_id:'msg_'+'b'.repeat(26),cursor:'next',created_at:1,body:'omit'}],cursor:'next',more:true};
+  assert.ok(!(await tool.execute({inbox_id:id,after:'now'},context)).content.includes('omit'));
+  payload.events[0].type='execute';await assert.rejects(()=>tool.execute({inbox_id:id,after:'now'},context));
+  globalThis.fetch=async()=>new Response('private upstream',{status:410});
+  await assert.rejects(()=>tool.execute({inbox_id:id},context),/replay without after/);
+}));
+
 function fixture(effect = 'allow', decision = 'once') {
   const tools = new Map(), skills = new Map(), providers = new Map();
   const calls = []; let deliver;
@@ -61,7 +95,7 @@ async function run(fn) {
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
   assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_inbox_archive','bayleaf_inbox_create',
-    'bayleaf_inbox_delete_message','bayleaf_inbox_destroy','bayleaf_inbox_messages','bayleaf_inbox_read',
+    'bayleaf_inbox_delete_message','bayleaf_inbox_destroy','bayleaf_inbox_events','bayleaf_inbox_lifetime','bayleaf_inbox_messages','bayleaf_inbox_read',
     'bayleaf_inbox_save','bayleaf_inboxes','bayleaf_unexpose','bayleaf_usage','webfetch']);
   assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-inboxes', 'bayleaf-sandboxes', 'bayleaf-scheduling']);
   for (const skill of f.skills.values()) {

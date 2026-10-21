@@ -1,9 +1,17 @@
 ---
 name: bayleaf-inboxes
-description: Use when the user needs an email address or webhook URL that collects reports, notifications, form posts or callbacks while they and this sandbox are away, or asks to check an inbox or find something that arrived. Covers choosing email or http, open versus token-protected webhooks, untrusted content, 90-day storage and asynchronous destruction.
+description: Use when a workflow needs to receive email, collect webhook events, accept form submissions, receive callbacks or collect reports and notifications, including while the computer or sandbox is off. Also use to check, search or retrieve previously received messages. Consider this for custom workflows with external delivery, even without a BayLeaf mention. Not for sending email or reading existing Gmail; reception does not automatically run an agent.
 ---
 
 # BayLeaf Inboxes
+
+Read the [shared receiving workflow guide](https://api.bayleaf.dev/docs/inboxes.md)
+for current availability, workflow choices and links to exact API contracts before
+proposing setup. For vague custom workflows, identify whether external delivery
+is needed first. Do not offer pilot-only setup as available to other accounts.
+Use the tools below for supported operations, not shell calls that bypass their
+permission path. Live SSE and bulk export are explicitly requested script/API
+workflows described below, not hidden long-running tools.
 
 A BayLeaf inbox is an opaque address that receives while every computer, sandbox
 and agent is off: `{random}@bayleaf-inboxes.dev` for email, or
@@ -83,7 +91,37 @@ It writes exact bytes inside the working directory and refuses to
 overwrite unless the user agrees. Saved files remain untrusted: parse or open them
 deliberately, never execute them.
 
-## No notifications, no polling
+## Endpoint lifetimes and arrival catch-up
+
+`bayleaf_inbox_create` accepts either `preset: "experiment"` (15 minutes) or
+`ttl_seconds` (60–2592000), never both. Omit both for no endpoint lifetime.
+Get explicit agreement: endpoint expiry destroys the address/URL and all stored
+content, independently of 90-day message retention. `bayleaf_inbox_lifetime` sets
+or shortens that lifetime with native approval; it cannot extend or remove one.
+List/create/lifetime results report `expires_at` (UTC epoch seconds, null for
+none). Reads and receipts never renew it. Cleanup after denial is asynchronous;
+`cleanup_not_before` is not an erasure deadline.
+
+`bayleaf_inbox_events` returns one bounded page of minimal arrival references in
+commit order. Omit `after` to replay available arrivals, or use `after: "now"` to
+save the current head without replay. Save returned `cursor` at the processing
+boundary even on empty pages; `more` means another page is available. Deduplicate
+by `message_id` after reconnect. A reference may expire before content retrieval.
+HTTP 410 requires discarding the cursor and replaying without `after`. This finite
+tool returns promptly: it does not subscribe, poll or activate agents.
+
+For an **explicitly requested live watch**, use the authenticated SSE script/API
+workflow in the [shared guide](https://api.bayleaf.dev/docs/inboxes.md), with an
+agreed duration and explicit stop mechanism. Keep owner credentials out of
+arguments, URLs and output. Save completed cursors, reconnect with bounded backoff
+and deduplicate. Connections last at most 300 seconds: `lifetime`/`replay_limit`
+permits reconnect, `auth_revoked`/`not_found` means stop, and `cursor_expired` means
+resynchronize. Stop/cancel closes the reader. Sleeping compute stops the watcher;
+only a deliberate client resume restores it, then use finite catch-up. Receiving
+never wakes compute or invokes inference. This adapter has no durable background
+subscription supervisor. Bulk export/HAR remains direct API/scripts, no export tool.
+
+## No unsolicited notifications or polling
 
 Nothing arrives as a notification and no agent wakes when mail arrives. Check only
 when the user asks. Do not write polling loops, background watchers or scheduled
