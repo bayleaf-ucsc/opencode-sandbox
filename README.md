@@ -16,7 +16,8 @@ Tested with OpenCode 2.0.23.
   attachment bytes to a non-clobbering path confined to the working directory,
   26 MiB cap; every save uses native permission with the exact destination path,
   since sender bytes can plant agent instructions or configuration). Mutations request
-  permission: `bayleaf_inbox_create` (resource includes type and any explicit lifetime),
+  permission: `bayleaf_inbox_create` (resource includes type, http `access` (`open` or `closed`,
+  required for http and rejected for email) and any explicit lifetime),
   `bayleaf_inbox_archive`, `bayleaf_inbox_delete_message` and
   `bayleaf_inbox_destroy` (resource names the address). Webhook sender tokens
   are deliberately not tools, so minted tokens never enter model context.

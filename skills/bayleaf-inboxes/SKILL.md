@@ -62,13 +62,20 @@ a new inbox to change it. Readback includes canonical `email_auth` and effective
 `restricted_email_max_bytes`. Never attach email policy to HTTP inboxes, even null.
 This adds no sender-secret handling and no policy mutation tool.
 
-A new http inbox is **open**: any request to its URL is stored. It becomes
-**closed** once the user mints at least one sender token; then requests must carry
-`Authorization: Bearer <token>`. Many providers (GitHub, for example) cannot send
-a custom bearer header: keep those inboxes open and verify the provider's own
-signature header against the exact saved body, which BayLeaf keeps but does not check.
-Revoking or expiring the last token never reopens the inbox: create a replacement
-credential to restore delivery. Current availability may be operator-only;
+Every http inbox chooses `access` at creation; there is no default, and email
+inboxes reject the field. **closed** denies anonymous delivery (401) from birth:
+nothing is stored until the user mints a sender token and the sender presents it as
+`Authorization: Bearer <token>`. Because the inbox is born closed, its URL can be
+handed out before any sender is configured with no anonymous window and no race.
+**open** stores any request to its URL until the user mints the first sender token,
+which closes it permanently. Recommend closed for anything private. Use open only
+for throwaway or public collection, or for providers that cannot send a custom
+bearer header (GitHub, Stripe and Slack webhooks, for example); for those, verify
+the provider's own signature header against the exact saved body, which BayLeaf
+keeps but does not check. Agree the choice with the user before native approval:
+the permission resource shows `http:closed` or `http:open`. Revoking or expiring
+the last token never reopens the inbox, and there is no reopen operation: create a
+replacement credential to restore delivery, or a new open inbox for wider access. Current availability may be operator-only;
 consult the live API guide rather than assuming every campus account has access.
 
 Tokens are deliberately not available as agent tools: a minted token would land in

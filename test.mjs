@@ -13,7 +13,7 @@ test('creation-only email policy validates before permission/network and preserv
     (writes.push(JSON.parse(init.body)),Response.json({id:'ibx_'+'a'.repeat(26),...JSON.parse(init.body),restricted_email_max_bytes:900000}));
   for(const email_auth of [{},[],{domains:[]},{domains:['*.example.org']},{domains:['a@example.org']},{domains:['example.org','EXAMPLE.ORG']},{domains:['example.org'],selector_pins:{'other.org':['s']}},{domains:['example.org'],selector_pins:{'example.org':['x','X']}},{domains:['example.org'],selector_pins:{'example.org':['a'.repeat(64)]}},{domains:['example.org'],extra:true}])
     await assert.rejects(()=>tool.execute({type:'email',email_auth},context));
-  for(const email_auth of [null,{domains:['example.org']}])await assert.rejects(()=>tool.execute({type:'http',email_auth},context));
+  for(const email_auth of [null,{domains:['example.org']}])await assert.rejects(()=>tool.execute({type:'http',access:'closed',email_auth},context));
   assert.equal(writes.length,0);assert.equal(f.calls.length,0);
   for(const email_auth of [undefined,null,{domains:['EXAMPLE.ORG'],selector_pins:{'EXAMPLE.ORG':['Mail_2026']}}]){
     const out=JSON.parse((await tool.execute({type:'email',...(email_auth===undefined?{}:{email_auth})},context)).content);
@@ -25,6 +25,21 @@ test('creation-only email policy validates before permission/network and preserv
   const denied=fixture('deny');await plugin.setup(denied.ctx);
   globalThis.fetch=async(url,init)=>denied.fetcher(url,init);
   await assert.rejects(()=>denied.tools.get('bayleaf_inbox_create').execute({type:'email',email_auth:{domains:['example.org']}},context),/denied/);
+}));
+test('http access is required, email access is rejected, both before permission/network', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const tool=f.tools.get('bayleaf_inbox_create');let writes=[];
+  assert.deepEqual(tool.input.properties.access.enum,['open','closed']);
+  globalThis.fetch=async(url,init)=>String(url).startsWith('http:')?f.fetcher(url,init):
+    (writes.push(JSON.parse(init.body)),Response.json({id:'ibx_'+'a'.repeat(26),...JSON.parse(init.body),closed:JSON.parse(init.body).access==='closed'}));
+  for(const access of [undefined,null,'',true,'OPEN','private'])await assert.rejects(()=>tool.execute({type:'http',...(access===undefined?{}:{access})},context),/access/);
+  for(const access of ['open','closed',null])await assert.rejects(()=>tool.execute({type:'email',access},context),/http only/);
+  assert.equal(writes.length,0);assert.equal(f.calls.length,0);
+  for(const access of ['closed','open']){
+    const out=JSON.parse((await tool.execute({type:'http',access},context)).content);
+    assert.equal(out.closed,access==='closed');assert.match(out.note,access==='closed'?/^Closed: anonymous delivery is denied/:/^Open:.*closes it permanently/);
+  }
+  assert.deepEqual(writes,[{type:'http',access:'closed'},{type:'http',access:'open'}]);
+  assert.deepEqual(f.calls.map(c=>JSON.parse(c.options.body).resources),[['http:closed'],['http:open']]);
 }));
 test('limits use owner GET, preserve overrides and reject malformed capacity without defaults', () => run(async () => {
   const f=fixture('deny');await plugin.setup(f.ctx);
@@ -48,15 +63,15 @@ test('lifetimes validate before permission, preserve expiry, and reject mutation
       (f.calls.push({url:String(url),options:init}),Response.json({id,type:'http',expires_at:1900000000,cleanup_not_before:1900000900}));
     const create=f.tools.get('bayleaf_inbox_create'),update=f.tools.get('bayleaf_inbox_lifetime');
     for(const args of [{ttl_seconds:59},{ttl_seconds:1.5},{ttl_seconds:2592001},{preset:'other'},{ttl_seconds:60,preset:'experiment'}])
-      await assert.rejects(()=>create.execute({type:'http',...args},context));
+      await assert.rejects(()=>create.execute({type:'http',access:'closed',...args},context));
     await assert.rejects(()=>update.execute({inbox_id:id},context));assert.equal(f.calls.length,0);
-    for(const [tool,args]of [[create,{type:'http',preset:'experiment'}],[update,{inbox_id:id,ttl_seconds:60}]]){
+    for(const [tool,args]of [[create,{type:'http',access:'closed',preset:'experiment'}],[update,{inbox_id:id,ttl_seconds:60}]]){
       if(effect==='deny')await assert.rejects(()=>tool.execute(args,context),/denied/);
       else{const r=JSON.parse((await tool.execute(args,context)).content);assert.equal(r.expires_at,1900000000);assert.equal(r.cleanup_not_before,1900000900);}
     }
     const writes=f.calls.filter(c=>c.url.startsWith('https:'));
     assert.equal(writes.length,effect==='deny'?0:2);
-    if(effect==='allow'){assert.deepEqual(JSON.parse(writes[0].options.body),{type:'http',preset:'experiment'});assert.equal(writes[1].options.method,'PATCH');}
+    if(effect==='allow'){assert.deepEqual(JSON.parse(writes[0].options.body),{type:'http',access:'closed',preset:'experiment'});assert.equal(writes[1].options.method,'PATCH');}
   }
 }));
 
@@ -343,7 +358,7 @@ function inboxes(f, routes = {}) {
 const reads = [['bayleaf_inboxes', {}], ['bayleaf_inbox_messages', { inbox_id:IBX, q:'report', view:'all', limit:5 }],
   ['bayleaf_inbox_read', { inbox_id:IBX, message_id:MSG }]];
 const writes = [
-  ['bayleaf_inbox_create', { type:'http', label:'forms' }, 'http', 'POST', '/inboxes'],
+  ['bayleaf_inbox_create', { type:'http', access:'closed', label:'forms' }, 'http:closed', 'POST', '/inboxes'],
   ['bayleaf_inbox_archive', { inbox_id:IBX, message_id:MSG }, `archive:${IBX}/${MSG}`, 'PATCH', `/inboxes/${IBX}/messages/${MSG}`],
   ['bayleaf_inbox_delete_message', { inbox_id:IBX, message_id:MSG }, `${IBX}/${MSG}`, 'DELETE', `/inboxes/${IBX}/messages/${MSG}`],
   ['bayleaf_inbox_destroy', { inbox_id:IBX }, `n@bayleaf-inboxes.dev (${IBX})`, 'DELETE', `/inboxes/${IBX}`]];
