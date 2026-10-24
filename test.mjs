@@ -6,6 +6,15 @@ import { join } from 'node:path';
 import plugin from './index.mjs';
 
 const secret = 'dtn_secret_synthetic_never_print';
+test('deliberate shared MCP setup removes only overlapping tools and recipe skills', () => run(async () => {
+  process.env.BAYLEAF_SHARED_MCP = 'true';
+  const f = fixture(); await plugin.setup(f.ctx);
+  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_inbox_delete_message',
+    'bayleaf_inbox_destroy','bayleaf_inbox_save','bayleaf_usage','webfetch']);
+  assert.deepEqual([...f.skills.keys()], ['bayleaf-scheduling']);
+  assert.ok(f.providers.has('bayleaf'));
+  delete process.env.BAYLEAF_SHARED_MCP;
+}));
 test('creation-only email policy validates before permission/network and preserves canonical readback', () => run(async () => {
   const f=fixture();await plugin.setup(f.ctx);const tool=f.tools.get('bayleaf_inbox_create');let writes=[];
   assert.ok(tool.input.properties.email_auth.anyOf);
@@ -132,7 +141,7 @@ async function run(fn) {
   process.env.BAYLEAF_INBOXES_ENABLED = 'true';
   try { await fn(); } finally {
     globalThis.fetch = oldFetch;
-    for (const name of ['BAYLEAF_API_KEY', 'BAYLEAF_OPENCODE_URL', 'OPENCODE_PASSWORD', 'BAYLEAF_INBOXES_ENABLED']) {
+    for (const name of ['BAYLEAF_API_KEY', 'BAYLEAF_OPENCODE_URL', 'OPENCODE_PASSWORD', 'BAYLEAF_INBOXES_ENABLED', 'BAYLEAF_SHARED_MCP']) {
       if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name];
     }
   }

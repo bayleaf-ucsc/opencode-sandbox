@@ -371,11 +371,12 @@ function headerCheck(headers) {
       entries.reduce((size, [name, value]) => size + name.length + value.length, 0) > 8192) invalid();
 }
 
-async function skills(inboxesEnabled) {
+async function skills(inboxesEnabled, sharedMcp) {
   const base = new URL('./skills/', import.meta.url);
   const result = [];
   for (const entry of await readdir(base, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
+    if (sharedMcp && ['bayleaf-sandboxes', 'bayleaf-inboxes'].includes(entry.name)) continue;
     if (entry.name === 'bayleaf-inboxes' && !inboxesEnabled) continue;
     const path = fileURLToPath(new URL(`${entry.name}/SKILL.md`, base));
     const markdown = await readFile(path, 'utf8');
@@ -395,7 +396,10 @@ export default {
   async setup(ctx) {
     if (!/^2\./.test(ctx.app.version)) throw new Error('BayLeaf sandbox requires OpenCode V2');
     const inboxesEnabled = process.env.BAYLEAF_INBOXES_ENABLED === 'true';
-    const bundled = await skills(inboxesEnabled);
+    // Set only by deliberate managed setup after installing the shared MCP.
+    // Remote package refresh alone must not remove a running client's tools.
+    const sharedMcp = process.env.BAYLEAF_SHARED_MCP === 'true';
+    const bundled = await skills(inboxesEnabled, sharedMcp);
     await ctx.skill.transform(editor => {
       for (const skill of bundled) {
         editor.add(skill);
@@ -413,7 +417,22 @@ export default {
       // Config selection is applied later, so users may explicitly override it.
       editor.default.set('bayleaf');
     });
-    await ctx.tool.transform(editor => {
+    await ctx.tool.transform(registry => {
+      // Keep nonoverlapping save/delete/destroy (including native approval), usage
+      // and webfetch. Shared MCP owns all other inbox and preview registrations.
+      const retained = new Set(['bayleaf_usage', 'webfetch', 'bayleaf_inbox_save',
+        'bayleaf_inbox_delete_message', 'bayleaf_inbox_destroy']);
+      const editor = { add(tool) {
+        if (sharedMcp && !retained.has(tool.name)) return;
+        if (sharedMcp) {
+          const names = text => text.replaceAll('bayleaf_inboxes', 'sandbox_inboxes')
+            .replaceAll('bayleaf_inbox_messages', 'sandbox_inbox_messages')
+            .replaceAll('bayleaf_inbox_read', 'sandbox_inbox_metadata');
+          tool = { ...tool, description: names(tool.description),
+            input: JSON.parse(names(JSON.stringify(tool.input))) };
+        }
+        registry.add(tool);
+      } };
       const empty = { type: 'object', properties: {}, additionalProperties: false };
       editor.add({ name: 'bayleaf_usage', options: { codemode: false },
         description: 'Read BayLeaf account budgets and remaining allowances. Read-only: does not provision keys or spend inference credits. Unknown balances are not zero.',
@@ -588,7 +607,7 @@ export default {
           if (!where || inbox.id !== inbox_id) throw new Error('Unexpected BayLeaf response');
           await approveFetch(ctx, context, `${where} (${inbox_id})`, 'bayleaf_inbox_destroy');
           const data = select(await inboxCall(route, context.signal, 'DELETE'), ['id','state']);
-          return result({ ...data, note: 'Destruction continues in the background; the inbox disappears from bayleaf_inboxes when done.' });
+          return result({ ...data, note: `Destruction continues in the background; the inbox disappears from ${sharedMcp ? 'sandbox_inboxes' : 'bayleaf_inboxes'} when done.` });
         } });
       }
       editor.add({ name: 'webfetch', options: { codemode: false },
