@@ -14,6 +14,10 @@ const INBOX_ERRORS = { 400: 'invalid request', 403: 'this credential cannot mana
   404: 'not found, destroyed, or Inboxes unavailable', 409: 'inbox limit reached or conflicting request',
   410: 'arrival cursor expired: replay without after and deduplicate by message_id',
   413: 'request too large', 415: 'unsupported request', 503: 'Inbox service unavailable' };
+const DIRECTORY_ERRORS = { 400: 'not a valid CruzID', 403: 'this credential cannot use the directory',
+  404: 'no public directory entry for this CruzID', 429: 'daily directory lookup cap reached (resets midnight UTC)',
+  502: 'campus directory unavailable', 503: 'directory lookup disabled' };
+const ERRORS = { inbox: INBOX_ERRORS, directory: DIRECTORY_ERRORS };
 
 // Only BayLeaf receives this credential. Queries and URLs go to the plaintext
 // web facet (Tavily), not the encrypted Sealed inference lane. Inbox calls go to
@@ -33,7 +37,7 @@ async function post(path, body, signal, timeout = 30, method = 'POST', { kind = 
     });
     if (!response.ok) {
       await response.body?.cancel();
-      const reason = kind === 'inbox' && INBOX_ERRORS[response.status];
+      const reason = ERRORS[kind]?.[response.status];
       throw new Safe(`BayLeaf ${kind} request failed (HTTP ${response.status})${reason ? ': ' + reason : ''}`);
     }
     if (response.status === 204) return {};
@@ -420,7 +424,7 @@ export default {
     await ctx.tool.transform(registry => {
       // Keep nonoverlapping save/delete/destroy (including native approval), usage
       // and webfetch. Shared MCP owns all other inbox and preview registrations.
-      const retained = new Set(['bayleaf_usage', 'webfetch', 'bayleaf_inbox_save',
+      const retained = new Set(['bayleaf_usage', 'bayleaf_whoami', 'bayleaf_directory', 'webfetch', 'bayleaf_inbox_save',
         'bayleaf_inbox_delete_message', 'bayleaf_inbox_destroy']);
       const editor = { add(tool) {
         if (sharedMcp && !retained.has(tool.name)) return;
@@ -438,6 +442,19 @@ export default {
         description: 'Read BayLeaf account budgets and remaining allowances. Read-only: does not provision keys or spend inference credits. Unknown balances are not zero.',
         input: empty, execute: async (_, context) => result(select(
           await post('/usage', undefined, context.signal, 30, 'GET'), ['observed_at', 'budgets'])) });
+      editor.add({ name: 'bayleaf_whoami', options: { codemode: false },
+        description: 'Identify the person this sandbox works for: their UCSC account email and the credential kind (key or sandbox). Read-only, no side effects. Follow with bayleaf_directory on the part before @ for their title, department and more.',
+        input: empty, execute: async (_, context) => result(select(
+          await post('/whoami', undefined, context.signal, 30, 'GET'), ['credential', 'email'])) });
+      editor.add({ name: 'bayleaf_directory', options: { codemode: false },
+        description: 'Look up one person in the public UCSC campus directory by CruzID (for an @ucsc.edu address, the part before @). Returns name, title, email, phone, links and labelled details such as department, affiliation, office and research interests; fields may be stale. No search: find people by name with Google Workspace directory search. Each call counts against a daily per-account cap, including misses. UCSC withholds undergraduate emails and FERPA-restricted students; do not try to recover them elsewhere. Look people up when the task needs it, not to build lists.',
+        input: { type: 'object', properties: { cruzid: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,32}$',
+          description: 'CruzID, e.g. amsmith' } }, required: ['cruzid'], additionalProperties: false },
+        execute: async ({ cruzid }, context) => {
+          if (typeof cruzid !== 'string' || !/^[A-Za-z0-9._-]{1,32}$/.test(cruzid)) throw new Error('Invalid CruzID: pass the part before @ucsc.edu');
+          return result(select(await post(`/directory/${cruzid}`, undefined, context.signal, 30, 'GET', { kind: 'directory' }),
+            ['cruzid', 'name', 'title', 'email', 'phone', 'details', 'links', 'source_url']));
+        } });
       const port = { type: 'integer', minimum: 3000, maximum: 9999, description: 'Server port; 3100 is reserved.' };
       editor.add({ name: 'bayleaf_expose', options: { codemode: false },
         description: 'Expose a running BayLeaf Sandbox web server. Bind the server to 0.0.0.0 first. Private access requires owner login; public access makes the URL available to anyone. Optional upstream_headers inject fixed application headers on HTTP and WebSocket requests in either access mode. Public visitors can use injected credentials. Never supply platform keys. Replaces the preview for this port. Returns a shareable HTTPS URL and expiry.',

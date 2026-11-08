@@ -9,8 +9,8 @@ const secret = 'dtn_secret_synthetic_never_print';
 test('deliberate shared MCP setup removes only overlapping tools and recipe skills', () => run(async () => {
   process.env.BAYLEAF_SHARED_MCP = 'true';
   const f = fixture(); await plugin.setup(f.ctx);
-  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_inbox_delete_message',
-    'bayleaf_inbox_destroy','bayleaf_inbox_save','bayleaf_usage','webfetch']);
+  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_directory','bayleaf_inbox_delete_message',
+    'bayleaf_inbox_destroy','bayleaf_inbox_save','bayleaf_usage','bayleaf_whoami','webfetch']);
   assert.deepEqual([...f.skills.keys()], ['bayleaf-scheduling']);
   assert.ok(f.providers.has('bayleaf'));
   delete process.env.BAYLEAF_SHARED_MCP;
@@ -149,9 +149,9 @@ async function run(fn) {
 
 test('package registers familiar tools and canonical skills with real helper paths', () => run(async () => {
   const f = fixture(); await plugin.setup(f.ctx);
-  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_inbox_archive','bayleaf_inbox_create',
+  assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_directory','bayleaf_expose','bayleaf_inbox_archive','bayleaf_inbox_create',
     'bayleaf_inbox_delete_message','bayleaf_inbox_destroy','bayleaf_inbox_events','bayleaf_inbox_lifetime','bayleaf_inbox_limits','bayleaf_inbox_messages','bayleaf_inbox_read',
-    'bayleaf_inbox_save','bayleaf_inboxes','bayleaf_unexpose','bayleaf_usage','webfetch']);
+    'bayleaf_inbox_save','bayleaf_inboxes','bayleaf_unexpose','bayleaf_usage','bayleaf_whoami','webfetch']);
   assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-inboxes', 'bayleaf-sandboxes', 'bayleaf-scheduling']);
   for (const skill of f.skills.values()) {
     assert.equal(skill.name, skill.id);
@@ -238,6 +238,29 @@ test('usage only reads its fixed route and omits unexpected fields', () => run(a
   await assert.rejects(()=>f.tools.get('bayleaf_usage').execute({},context),/Unexpected/);
 }));
 
+test('whoami and directory read fixed GET routes, strip extra fields, and explain statuses', () => run(async () => {
+  const f=fixture();await plugin.setup(f.ctx);const calls=[];let status=200;
+  globalThis.fetch=async(url,options)=>{
+    calls.push({url,options});
+    if(status!==200)return new Response(secret,{status});
+    return Response.json(new URL(url).pathname==='/whoami'?{credential:'key',email:'owner@ucsc.edu',debug:secret}
+      :{cruzid:'alove',name:'Ada',title:null,email:null,phone:null,details:{Affiliation:'Faculty'},links:[],source_url:'https://campusdirectory.ucsc.edu/cd_detail?uid=alove',debug:secret});
+  };
+  assert.deepEqual(JSON.parse((await f.tools.get('bayleaf_whoami').execute({},context)).content),{credential:'key',email:'owner@ucsc.edu'});
+  const entry=JSON.parse((await f.tools.get('bayleaf_directory').execute({cruzid:'alove'},context)).content);
+  assert.equal(entry.name,'Ada');assert.ok(!('debug' in entry));
+  assert.deepEqual(calls.map(c=>new URL(c.url).pathname),['/whoami','/directory/alove']);
+  assert.ok(calls.every(c=>c.options.method==='GET'&&c.options.body===undefined));
+  for(const bad of ['../usage','a b','x'.repeat(33),'amsmith@ucsc.edu'])
+    await assert.rejects(()=>f.tools.get('bayleaf_directory').execute({cruzid:bad},context),/Invalid CruzID/);
+  assert.equal(calls.length,2,'invalid CruzIDs never reach the network');
+  for(const [code,reason] of [[404,/no public directory entry/],[429,/daily directory lookup cap/]]){
+    status=code;
+    await assert.rejects(()=>f.tools.get('bayleaf_directory').execute({cruzid:'alove'},context),
+      e=>reason.test(e.message)&&!e.message.includes(secret));
+  }
+}));
+
 test('exposure permissions distinguish access scope; output strips provider data; revoke uses DELETE', () => run(async () => {
   const f=fixture();await plugin.setup(f.ctx);const calls=[];
   globalThis.fetch=async(url,options)=>{
@@ -309,7 +332,7 @@ test('Inboxes default off: no tools, skill, indirect advertising or startup netw
     if (value === undefined) delete process.env.BAYLEAF_INBOXES_ENABLED;
     else process.env.BAYLEAF_INBOXES_ENABLED = value;
     const f = fixture(); await plugin.setup(f.ctx);
-    assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_expose','bayleaf_unexpose','bayleaf_usage','webfetch']);
+    assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_directory','bayleaf_expose','bayleaf_unexpose','bayleaf_usage','bayleaf_whoami','webfetch']);
     assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-sandboxes','bayleaf-scheduling']);
     assert.ok(!JSON.stringify([...f.skills.values()]).includes('bayleaf-inbox'));
   }

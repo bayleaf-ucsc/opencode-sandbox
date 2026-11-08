@@ -18,6 +18,9 @@ elsewhere: their localhost is not this sandbox's localhost.
 ## Use the tools directly
 
 - `bayleaf_usage`: current budgets and allowances, without spending inference.
+- `bayleaf_whoami`: the UCSC account email of the person this sandbox works for.
+- `bayleaf_directory`: one public campus directory entry by CruzID (no search;
+  daily cap; look people up only when the task needs it).
 - `bayleaf_expose`: expose a running web server's port. Private is the default;
   public means anyone with the URL can access it. Explicitly choose that scope.
 - `bayleaf_unexpose`: revoke a port's preview without stopping its server.
