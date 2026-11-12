@@ -141,7 +141,7 @@ async function run(fn) {
   process.env.BAYLEAF_INBOXES_ENABLED = 'true';
   try { await fn(); } finally {
     globalThis.fetch = oldFetch;
-    for (const name of ['BAYLEAF_API_KEY', 'BAYLEAF_OPENCODE_URL', 'OPENCODE_PASSWORD', 'BAYLEAF_INBOXES_ENABLED', 'BAYLEAF_SHARED_MCP']) {
+    for (const name of ['BAYLEAF_API_KEY', 'BAYLEAF_OPENCODE_URL', 'OPENCODE_PASSWORD', 'BAYLEAF_INBOXES_ENABLED', 'BAYLEAF_SHARED_MCP', 'BAYLEAF_ROOMS_ENABLED']) {
       if (oldEnv[name] === undefined) delete process.env[name]; else process.env[name] = oldEnv[name];
     }
   }
@@ -335,6 +335,19 @@ test('Inboxes default off: no tools, skill, indirect advertising or startup netw
     assert.deepEqual([...f.tools.keys()].sort(), ['bayleaf_directory','bayleaf_expose','bayleaf_unexpose','bayleaf_usage','bayleaf_whoami','webfetch']);
     assert.deepEqual([...f.skills.keys()].sort(), ['bayleaf-sandboxes','bayleaf-scheduling']);
     assert.ok(!JSON.stringify([...f.skills.values()]).includes('bayleaf-inbox'));
+  }
+}));
+
+test('Rooms skill only with exact true, shared MCP included, and no tools', () => run(async () => {
+  globalThis.fetch = async () => { assert.fail('setup must not access the network'); };
+  for (const [value, shared, expected] of [[undefined, undefined, false], ['TRUE', undefined, false], ['1', undefined, false],
+    ['true', undefined, true], ['true', 'true', true]]) {
+    if (value === undefined) delete process.env.BAYLEAF_ROOMS_ENABLED; else process.env.BAYLEAF_ROOMS_ENABLED = value;
+    if (shared === undefined) delete process.env.BAYLEAF_SHARED_MCP; else process.env.BAYLEAF_SHARED_MCP = shared;
+    const f = fixture(); await plugin.setup(f.ctx);
+    assert.equal(f.skills.has('bayleaf-rooms'), expected);
+    assert.ok(![...f.tools.keys()].some(name => name.includes('room')));
+    if (expected) assert.match(f.skills.get('bayleaf-rooms').content, /api\.bayleaf\.dev\/docs\/rooms\.md/);
   }
 }));
 

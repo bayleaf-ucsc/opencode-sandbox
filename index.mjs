@@ -375,13 +375,15 @@ function headerCheck(headers) {
       entries.reduce((size, [name, value]) => size + name.length + value.length, 0) > 8192) invalid();
 }
 
-async function skills(inboxesEnabled, sharedMcp) {
+async function skills(inboxesEnabled, sharedMcp, roomsEnabled) {
   const base = new URL('./skills/', import.meta.url);
   const result = [];
   for (const entry of await readdir(base, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     if (sharedMcp && ['bayleaf-sandboxes', 'bayleaf-inboxes'].includes(entry.name)) continue;
     if (entry.name === 'bayleaf-inboxes' && !inboxesEnabled) continue;
+    // Rooms is a skill only (it teaches the HTTP API; no tools), so shared MCP keeps it.
+    if (entry.name === 'bayleaf-rooms' && !roomsEnabled) continue;
     const path = fileURLToPath(new URL(`${entry.name}/SKILL.md`, base));
     const markdown = await readFile(path, 'utf8');
     const match = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
@@ -403,7 +405,8 @@ export default {
     // Set only by deliberate managed setup after installing the shared MCP.
     // Remote package refresh alone must not remove a running client's tools.
     const sharedMcp = process.env.BAYLEAF_SHARED_MCP === 'true';
-    const bundled = await skills(inboxesEnabled, sharedMcp);
+    const roomsEnabled = process.env.BAYLEAF_ROOMS_ENABLED === 'true';
+    const bundled = await skills(inboxesEnabled, sharedMcp, roomsEnabled);
     await ctx.skill.transform(editor => {
       for (const skill of bundled) {
         editor.add(skill);
